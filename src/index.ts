@@ -173,8 +173,9 @@ const server = serve({
           if (await tailwindFile.exists()) {
             return new Response(tailwindFile, { headers: { "Content-Type": "text/css" } });
           }
-        } else if (pathname.startsWith("/assets/")) {
-           const assetPath = join(process.cwd(), "src", pathname.replace("/assets/", ""));
+        } else if (pathname.startsWith("/assets/") || pathname.endsWith(".svg") || pathname.endsWith(".png")) {
+           const assetName = pathname.startsWith("/assets/") ? pathname.replace("/assets/", "") : pathname.replace("/", "");
+           const assetPath = join(process.cwd(), "src", assetName);
            const assetFile = Bun.file(assetPath);
            if (await assetFile.exists()) {
              return new Response(assetFile);
@@ -210,10 +211,12 @@ const server = serve({
     const isFile = pathname.includes(".");
     if (!isFile || pathname.endsWith(".html")) {
       try {
-        const stream = await render(req);
+        const { stream, dehydratedStateScript } = await render(req);
+        const stateScript = `<script>${dehydratedStateScript}</script>`;
+        
         const responseStream = new ReadableStream({
           async start(controller) {
-            controller.enqueue(new TextEncoder().encode(htmlStart + '<div id="root">'));
+            controller.enqueue(new TextEncoder().encode(htmlStart + stateScript + '<div id="root">'));
             const reader = stream.getReader();
             while (true) {
               const { done, value } = await reader.read();

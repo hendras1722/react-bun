@@ -1,29 +1,37 @@
 import { renderToReadableStream } from "react-dom/server";
-import { createStaticHandler, createStaticRouter, StaticRouterProvider } from "react-router";
-import { getRouterConfig } from "./router";
-
+import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
+import { attachRouterServerSsrUtils } from "@tanstack/react-router/ssr/server";
+import { router } from "./router";
 import { ThemeProvider } from "./components/ThemeProvider";
 
 export async function render(request: Request) {
-  const routes = getRouterConfig();
-  const handler = createStaticHandler(routes);
-  const fetchRequest = new Request(request.url, {
-    method: request.method,
-    headers: request.headers,
+  const url = new URL(request.url);
+  const memoryHistory = createMemoryHistory({
+    initialEntries: [url.pathname + url.search],
   });
+
+  router.update({
+    history: memoryHistory,
+  });
+
+  // Attach SSR utils
+  attachRouterServerSsrUtils({ router });
+
+  // Wait for all loaders to resolve
+  await router.load();
+
+  // Dehydrate the router state (this will buffer scripts)
+  await (router as any).serverSsr.dehydrate();
   
-  const context = await handler.query(fetchRequest);
+  // Take the buffered scripts which contain the dehydrated state
+  const scripts = (router as any).serverSsr.takeBufferedScripts();
+  const dehydratedStateScript = scripts.children;
 
-  // If the handler returned a redirect response, we should throw it so the server can handle it
-  if (context instanceof Response) {
-    throw context;
-  }
-
-  const router = createStaticRouter(handler.dataRoutes, context);
-
-  return await renderToReadableStream(
+  const stream = await renderToReadableStream(
     <ThemeProvider defaultTheme="dark" storageKey="bun-admin-theme">
-      <StaticRouterProvider router={router} context={context} />
+      <RouterProvider router={router} />
     </ThemeProvider>
   );
+
+  return { stream, dehydratedStateScript };
 }

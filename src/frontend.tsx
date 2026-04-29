@@ -1,18 +1,18 @@
 import { StrictMode } from "react";
 import { hydrateRoot } from "react-dom/client";
-import { createBrowserRouter, RouterProvider } from "react-router-dom";
-import { getRouterConfig } from "./router";
-
+import { RouterProvider } from "@tanstack/react-router";
+import { hydrate } from "@tanstack/react-router/ssr/client";
+import { router } from "./router";
 import { ThemeProvider } from "./components/ThemeProvider";
 
-const router = createBrowserRouter(getRouterConfig());
+// Hydrate the router state from the server
+// The script injected by the server will have already populated window.$_TSR
+hydrate(router);
 
 const app = (
-  <StrictMode>
-    <ThemeProvider defaultTheme="dark" storageKey="bun-admin-theme">
-      <RouterProvider router={router} />
-    </ThemeProvider>
-  </StrictMode>
+  <ThemeProvider defaultTheme="dark" storageKey="bun-admin-theme">
+    <RouterProvider router={router} />
+  </ThemeProvider>
 );
 
 const elem = document.getElementById("root")!;

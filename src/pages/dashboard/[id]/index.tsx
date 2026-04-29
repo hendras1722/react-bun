@@ -1,7 +1,7 @@
-import { useParams } from "react-router-dom";
+import { useParams } from "@tanstack/react-router";
 
 export default function Page() {
-  const { id } = useParams();
+  const { id } = useParams({ strict: false });
 
   return (
     <div style={{ padding: '2rem' }}>

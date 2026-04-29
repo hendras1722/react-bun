@@ -144,7 +144,7 @@ export function generate() {
   ).join("\n");
 
   const routesExport = `export const generatedRoutesRaw = [\n  ${sortedRoutes.map(r =>
-    `{ path: "${r.urlPath}", element: <${r.importName} />, loader: ${r.hasLoader ? `${r.importName}Loader` : 'undefined'}, layout: ${r.layout === "false" ? "false" : `"${r.layout}"`}, meta: ${r.meta} }`
+    `{ path: "${r.urlPath}", component: ${r.importName}, loader: ${r.hasLoader ? `${r.importName}Loader` : 'undefined'}, layout: ${r.layout === "false" ? "false" : `"${r.layout}"`}, meta: ${r.meta} }`
   ).join(",\n  ")}\n];`;
 
   writeFileSync(ROUTES_OUTPUT, `// AUTOMATICALLY GENERATED\nimport React from "react";\n${routesImports}\n\n${routesExport}\n`);

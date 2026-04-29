@@ -1,14 +1,16 @@
-import { Outlet, useMatches } from "react-router-dom";
+import { Outlet, useRouterState } from "@tanstack/react-router";
 import { useState } from "react";
 import { AppSidebar } from "../components/AppSidebar";
 import { AppHeader } from "../components/AppHeader";
 
 export default function AdminLayout({ data }: any) {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
-  const matches = useMatches();
+  const { matches } = useRouterState();
 
-  const currentMatch: any = matches.find((m: any) => m.handle);
-  const meta = currentMatch?.handle || {};
+  // In TanStack Router, meta is stored on the match object
+  // We defined it as a function in createRoute, but TanStack Router resolves it.
+  const metaMatch = [...matches].reverse().find((m) => (m.context as any)?.routeMeta);
+  const meta = (metaMatch?.context as any)?.routeMeta || {};
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/30">

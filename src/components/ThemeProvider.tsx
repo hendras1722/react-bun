@@ -26,12 +26,14 @@ export function ThemeProvider({
   storageKey = "bun-admin-theme",
   ...props
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window !== "undefined") {
-      return (localStorage.getItem(storageKey) as Theme) || defaultTheme;
+  const [theme, setTheme] = useState<Theme>(defaultTheme);
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem(storageKey) as Theme;
+    if (savedTheme) {
+      setTheme(savedTheme);
     }
-    return defaultTheme;
-  });
+  }, [storageKey]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
