@@ -23,22 +23,36 @@ function getFilesRecursively(dir: string): string[] {
 }
 
 function extractMeta(content: string): string {
-  const metaRegex = /export const meta\s*=\s*({[\s\S]*?});?(\n\s*export|\n\s*$)/;
-  const match = content.match(metaRegex);
-  if (match) {
-    return match[1]?.trim() ?? '';
+  // Look for: export const meta = { ... }
+  // We use a more flexible regex that finds the first matching brace pair after "export const meta ="
+  const metaStartMatch = content.match(/export const meta\s*=\s*({)/);
+  if (!metaStartMatch || metaStartMatch.index === undefined) return "undefined";
+
+  const startIndex = metaStartMatch.index + metaStartMatch[0].length - 1;
+  let braceCount = 0;
+  let endIndex = -1;
+
+  for (let i = startIndex; i < content.length; i++) {
+    if (content[i] === "{") braceCount++;
+    if (content[i] === "}") braceCount--;
+    if (braceCount === 0) {
+      endIndex = i + 1;
+      break;
+    }
   }
 
-  const singleLineMatch = content.match(/export const meta\s*=\s*({.*?});?/);
-  if (singleLineMatch) {
-    return singleLineMatch[1]?.trim() ?? '';
+  if (endIndex !== -1) {
+    return content.slice(startIndex, endIndex);
   }
 
   return "undefined";
 }
 
-function generate() {
+export function generate() {
   console.log("🚀 Generating routes & layouts...");
+
+  if (!readdirSync(PAGES_DIR)) return;
+  if (!readdirSync(LAYOUTS_DIR)) return;
 
   // 1. Generate Layouts
   const layoutFiles = readdirSync(LAYOUTS_DIR).filter(f => f.endsWith(".tsx"));
@@ -95,12 +109,18 @@ function generate() {
       urlPath = urlPath.replace(/\/(index|page|home)$/, "");
     }
 
+    // Check for getServerSide export
+    const hasLoader = content.includes("export const getServerSide") || 
+                      content.includes("export async function getServerSide") ||
+                      content.includes("export function getServerSide");
+
     return {
       importName,
       importPath: `./pages/${pathWithoutExt}`,
       urlPath,
       layout: layoutValue,
-      meta: metaValue
+      meta: metaValue,
+      hasLoader
     };
   });
 
@@ -117,9 +137,14 @@ function generate() {
     return b.urlPath.length - a.urlPath.length;
   });
 
-  const routesImports = routesData.map(r => `import ${r.importName} from "${r.importPath}";`).join("\n");
+  const routesImports = routesData.map(r => 
+    r.hasLoader 
+      ? `import ${r.importName}, { getServerSide as ${r.importName}Loader } from "${r.importPath}";`
+      : `import ${r.importName} from "${r.importPath}";`
+  ).join("\n");
+
   const routesExport = `export const generatedRoutesRaw = [\n  ${sortedRoutes.map(r =>
-    `{ path: "${r.urlPath}", element: <${r.importName} />, layout: ${r.layout === "false" ? "false" : `"${r.layout}"`}, meta: ${r.meta} }`
+    `{ path: "${r.urlPath}", element: <${r.importName} />, loader: ${r.hasLoader ? `${r.importName}Loader` : 'undefined'}, layout: ${r.layout === "false" ? "false" : `"${r.layout}"`}, meta: ${r.meta} }`
   ).join(",\n  ")}\n];`;
 
   writeFileSync(ROUTES_OUTPUT, `// AUTOMATICALLY GENERATED\nimport React from "react";\n${routesImports}\n\n${routesExport}\n`);
@@ -127,4 +152,7 @@ function generate() {
   console.log(`✅ Generated ${layoutsData.length} layouts and ${routesData.length} routes.`);
 }
 
-generate();
+// Run if direct
+if (import.meta.main || process.argv[1] === import.meta.filename) {
+  generate();
+}

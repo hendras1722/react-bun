@@ -2,6 +2,8 @@ import { renderToReadableStream } from "react-dom/server";
 import { createStaticHandler, createStaticRouter, StaticRouterProvider } from "react-router";
 import { getRouterConfig } from "./router";
 
+import { ThemeProvider } from "./components/ThemeProvider";
+
 export async function render(request: Request) {
   const routes = getRouterConfig();
   const handler = createStaticHandler(routes);
@@ -20,6 +22,8 @@ export async function render(request: Request) {
   const router = createStaticRouter(handler.dataRoutes, context);
 
   return await renderToReadableStream(
-    <StaticRouterProvider router={router} context={context} />
+    <ThemeProvider defaultTheme="dark" storageKey="bun-admin-theme">
+      <StaticRouterProvider router={router} context={context} />
+    </ThemeProvider>
   );
 }

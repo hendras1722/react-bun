@@ -1,40 +1,48 @@
-import { Link, Outlet, useMatches } from "react-router-dom";
+import { Outlet, useMatches } from "react-router-dom";
+import { useState } from "react";
+import { AppSidebar } from "../components/AppSidebar";
+import { AppHeader } from "../components/AppHeader";
 
-export default function AdminLayout() {
+export default function AdminLayout({ data }: any) {
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
   const matches = useMatches();
 
   const currentMatch: any = matches.find((m: any) => m.handle);
   const meta = currentMatch?.handle || {};
-  console.log(matches, 'inimeta')
 
   return (
-    <div className="admin-layout" style={{ display: 'flex', minHeight: '100vh' }}>
-      <aside className="sidebar" style={{ width: '250px', background: '#1a1a1a', padding: '2rem', borderRight: '1px solid #333' }}>
-        <h2 style={{ color: '#fbf0df' }}>{meta.title || "Admin Panel"}</h2>
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '2rem' }}>
-          <Link to="/" style={{ color: '#ccc', textDecoration: 'none' }}>Back to Site</Link>
-          <Link
-            to="/dashboard"
-            style={{
-              color: meta.activeMenu === 'dashboard' ? '#646cff' : '#fff',
-              textDecoration: 'none',
-              fontWeight: 'bold'
-            }}
-          >
-            Dashboard
-          </Link>
-          <Link to="/settings" style={{ color: '#ccc', textDecoration: 'none' }}>Settings</Link>
-        </nav>
+    <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/30">
+      {/* Sidebar Navigation */}
+      <AppSidebar 
+        isOpen={isSidebarOpen} 
+        setOpen={setSidebarOpen} 
+        data={data} 
+        meta={meta} 
+      />
 
-        {meta.permission && (
-          <div style={{ marginTop: '2rem', fontSize: '0.8rem', color: '#666' }}>
-            Permissions: {meta.permission.join(', ')}
+      {/* Main Content Area */}
+      <div className="lg:ml-64 flex flex-col min-h-screen transition-all duration-300">
+        <AppHeader 
+          onMenuClick={() => setSidebarOpen(true)} 
+          title={meta.title} 
+        />
+        
+        {/* Page Content */}
+        <main className="flex-1 p-6 lg:p-8">
+          <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-2 duration-500">
+            <Outlet />
           </div>
-        )}
-      </aside>
-      <main className="admin-content" style={{ flex: 1, padding: '2rem', background: '#242424' }}>
-        <Outlet />
-      </main>
+        </main>
+
+        {/* Footer */}
+        <footer className="px-8 py-6 border-t text-muted-foreground text-sm flex flex-col sm:flex-row justify-between items-center gap-4 bg-muted/30">
+          <p>© 2024 BunAdmin. Built with ❤️ using Bun & React.</p>
+          <div className="flex gap-6">
+            <a href="#" className="hover:text-primary transition-colors">Documentation</a>
+            <a href="#" className="hover:text-primary transition-colors">Support</a>
+          </div>
+        </footer>
+      </div>
     </div>
   );
 }

@@ -2,13 +2,16 @@ import { StrictMode } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { getRouterConfig } from "./router";
-import "./index.css";
+
+import { ThemeProvider } from "./components/ThemeProvider";
 
 const router = createBrowserRouter(getRouterConfig());
 
 const app = (
   <StrictMode>
-    <RouterProvider router={router} />
+    <ThemeProvider defaultTheme="dark" storageKey="bun-admin-theme">
+      <RouterProvider router={router} />
+    </ThemeProvider>
   </StrictMode>
 );
 
