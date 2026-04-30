@@ -1,4 +1,4 @@
-import { LucideIcon, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { type LucideIcon, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { Card } from "./ui/Card";
 
 interface StatsCardProps {
