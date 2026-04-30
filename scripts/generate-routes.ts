@@ -77,7 +77,7 @@ export function generate() {
     const layoutMatch = content.match(/export const layout\s*=\s*(['"])([^'"]+)\1/);
     let layoutValue = "Main"; // Default
     if (layoutMatch) {
-      layoutValue = layoutMatch[2]; // Get the value inside quotes
+      layoutValue = layoutMatch[2] ?? ''; // Get the value inside quotes
     } else if (content.includes("export const layout = false")) {
       layoutValue = "false";
     }
@@ -103,16 +103,16 @@ export function generate() {
       })
       .join("/");
 
-    if (urlPath === "index" || urlPath === "home" || urlPath === "page") {
+    if (urlPath === "index" || urlPath === "page") {
       urlPath = "";
     } else {
       urlPath = urlPath.replace(/\/(index|page|home)$/, "");
     }
 
     // Check for getServerSide export
-    const hasLoader = content.includes("export const getServerSide") || 
-                      content.includes("export async function getServerSide") ||
-                      content.includes("export function getServerSide");
+    const hasLoader = content.includes("export const getServerSide") ||
+      content.includes("export async function getServerSide") ||
+      content.includes("export function getServerSide");
 
     return {
       importName,
@@ -137,8 +137,8 @@ export function generate() {
     return b.urlPath.length - a.urlPath.length;
   });
 
-  const routesImports = routesData.map(r => 
-    r.hasLoader 
+  const routesImports = routesData.map(r =>
+    r.hasLoader
       ? `import ${r.importName}, { getServerSide as ${r.importName}Loader } from "${r.importPath}";`
       : `import ${r.importName} from "${r.importPath}";`
   ).join("\n");

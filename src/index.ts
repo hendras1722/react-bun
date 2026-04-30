@@ -1,6 +1,9 @@
-import { serve, plugin } from "bun";
+import { serve, plugin, type BunRequest } from "bun";
 import { readFileSync, watch as fsWatch } from "fs";
 import { join } from "path";
+import { handleProxyRequest } from "./server/proxy";
+import { renderHeadToString } from "./hooks/useSeoMeta";
+import { serverContext } from "./server/context";
 
 // ── Tailwind CSS ──────────────────────────────────────────────────────────────
 // Build Tailwind once (synchronously) so the CSS is ready before the server
@@ -36,6 +39,10 @@ const clientBuild = await Bun.build({
   publicPath: "/",
   naming: {
     asset: "assets/[name].[ext]",
+  },
+  define: {
+    "process.env": JSON.stringify(process.env),
+    "Bun.env": JSON.stringify(process.env),
   },
 });
 
@@ -84,9 +91,17 @@ if (process.env.NODE_ENV !== "production") {
   fsWatch(join(process.cwd(), "src", "layouts"), watchOptions, handleWatch);
 }
 
-const indexHtml = readFileSync("./src/index.html", "utf-8");
+let indexHtml = readFileSync("./src/index.html", "utf-8");
 const splitPoint = '<div id="root"></div>';
 let [htmlStart, htmlEnd] = indexHtml.split(splitPoint);
+
+// Function to get latest HTML in dev
+function getHtmlTemplate() {
+  if (process.env.NODE_ENV !== "production") {
+    indexHtml = readFileSync("./src/index.html", "utf-8");
+    [htmlStart, htmlEnd] = indexHtml.split(splitPoint);
+  }
+}
 
 // Always inject tailwind.css directly (served fresh from disk) + bundled JS CSS
 const twLink = '<link rel="stylesheet" href="/tailwind.css" />';
@@ -103,7 +118,7 @@ const themeScript = `
   })();
 </script>
 `;
-htmlStart = htmlStart?.replace('</head>', `${twLink}${bundleLink}${themeScript}</head>`);
+// We will inject these dynamically in the fetch handler now
 
 // Prepare Live Reload script for injection at the end of body
 let liveReloadScript = "";
@@ -139,7 +154,7 @@ if (process.env.NODE_ENV !== "production") {
 const server = serve({
   port: 3000,
   routes: {
-    "/api/hello": () => Response.json({ message: "Hello from Bun" }),
+    "/api/*": (req: BunRequest<'/api/*'>) => handleProxyRequest(req),
     // Always serve tailwind.css fresh from disk so hot-reload works without server restart
     "/tailwind.css": async () => {
       const file = Bun.file(join(process.cwd(), "src", "tailwind.css"));
@@ -174,18 +189,18 @@ const server = serve({
             return new Response(tailwindFile, { headers: { "Content-Type": "text/css" } });
           }
         } else if (pathname.startsWith("/assets/") || pathname.endsWith(".svg") || pathname.endsWith(".png")) {
-           const assetName = pathname.startsWith("/assets/") ? pathname.replace("/assets/", "") : pathname.replace("/", "");
-           const assetPath = join(process.cwd(), "src", assetName);
-           const assetFile = Bun.file(assetPath);
-           if (await assetFile.exists()) {
-             return new Response(assetFile);
-           }
+          const assetName = pathname.startsWith("/assets/") ? pathname.replace("/assets/", "") : pathname.replace("/", "");
+          const assetPath = join(process.cwd(), "src", assetName);
+          const assetFile = Bun.file(assetPath);
+          if (await assetFile.exists()) {
+            return new Response(assetFile);
+          }
         }
       }
 
       const blob = buildOutputs.get(pathname)!;
       let contentType = blob.type;
-      
+
       // Fix content types
       if (pathname.endsWith(".js")) contentType = "application/javascript";
       else if (pathname.endsWith(".css")) contentType = "text/css";
@@ -211,25 +226,31 @@ const server = serve({
     const isFile = pathname.includes(".");
     if (!isFile || pathname.endsWith(".html")) {
       try {
-        const { stream, dehydratedStateScript } = await render(req);
-        const stateScript = `<script>${dehydratedStateScript}</script>`;
-        
-        const responseStream = new ReadableStream({
-          async start(controller) {
-            controller.enqueue(new TextEncoder().encode(htmlStart + stateScript + '<div id="root">'));
-            const reader = stream.getReader();
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              controller.enqueue(value);
+        getHtmlTemplate();
+
+        return await serverContext.run({ req }, async () => {
+          const { stream, dehydratedStateScript, headContext } = await render(req);
+          const stateScript = `<script>${dehydratedStateScript}</script>`;
+          const dynamicHead = headContext ? renderHeadToString(headContext) : "";
+
+          const responseStream = new ReadableStream({
+            async start(controller) {
+              const currentHtmlStart = htmlStart?.replace('</head>', `${dynamicHead}${twLink}${bundleLink}${themeScript}</head>`);
+              controller.enqueue(new TextEncoder().encode(currentHtmlStart + stateScript + '<div id="root">'));
+              const reader = stream.getReader();
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                controller.enqueue(value);
+              }
+              const modifiedHtmlEnd = htmlEnd?.replace('./frontend.tsx', '/frontend.js')
+                .replace('</body>', `${liveReloadScript}</body>`);
+              controller.enqueue(new TextEncoder().encode('</div>' + modifiedHtmlEnd));
+              controller.close();
             }
-            const modifiedHtmlEnd = htmlEnd?.replace('./frontend.tsx', '/frontend.js')
-                                           .replace('</body>', `${liveReloadScript}</body>`);
-            controller.enqueue(new TextEncoder().encode('</div>' + modifiedHtmlEnd));
-            controller.close();
-          }
+          });
+          return new Response(responseStream, { headers: { "Content-Type": "text/html" } });
         });
-        return new Response(responseStream, { headers: { "Content-Type": "text/html" } });
       } catch (e) {
         if (e instanceof Response) return e;
         console.error("SSR Error:", e);

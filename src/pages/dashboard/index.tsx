@@ -29,7 +29,7 @@ export const layout = "admin";
 export const meta = {
   activeMenu: "dashboard",
   permission: ["admin", "user"],
-  title: "Analytics Overview",
+  title: "Aasdasdnalytics Overview",
 };
 
 const transactions = [
@@ -46,8 +46,7 @@ const statusConfig: Record<string, { variant: "default" | "secondary" | "destruc
   Failed: { variant: "destructive" },
 };
 
-export default function Dashboard(res) {
-  console.log('dashboard', res)
+export default function Dashboard() {
   const stats = [
     { label: "Total Users", value: "2,543", trend: "+12.5%", isUp: true, icon: Users, color: "text-primary", bg: "bg-primary/10" },
     { label: "Revenue", value: "$45,231", trend: "+8.2%", isUp: true, icon: DollarSign, color: "text-primary", bg: "bg-primary/10" },
@@ -183,7 +182,6 @@ export default function Dashboard(res) {
 }
 
 export const getServerSide = async () => {
-  console.log(" getServerSideDashboard")
   return {
     message: "This data came from the server!qweqwewqe",
     timestamp: new Date().toISOString()

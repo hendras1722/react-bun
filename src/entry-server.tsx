@@ -3,6 +3,7 @@ import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { attachRouterServerSsrUtils } from "@tanstack/react-router/ssr/server";
 import { router } from "./router";
 import { ThemeProvider } from "./components/ThemeProvider";
+import { SeoProvider } from "./hooks/useSeoMeta";
 
 export async function render(request: Request) {
   const url = new URL(request.url);
@@ -15,10 +16,12 @@ export async function render(request: Request) {
   });
 
   // Attach SSR utils
-  attachRouterServerSsrUtils({ router });
+  attachRouterServerSsrUtils({ router, manifest: undefined });
 
   // Wait for all loaders to resolve
   await router.load();
+
+  const serverContext: any = { head: {} };
 
   // Dehydrate the router state (this will buffer scripts)
   await (router as any).serverSsr.dehydrate();
@@ -29,9 +32,11 @@ export async function render(request: Request) {
 
   const stream = await renderToReadableStream(
     <ThemeProvider defaultTheme="dark" storageKey="bun-admin-theme">
-      <RouterProvider router={router} />
+      <SeoProvider serverContext={serverContext}>
+        <RouterProvider router={router} />
+      </SeoProvider>
     </ThemeProvider>
   );
 
-  return { stream, dehydratedStateScript };
+  return { stream, dehydratedStateScript, headContext: serverContext.head };
 }
