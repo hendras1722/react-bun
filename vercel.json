@@ -1,24 +1,12 @@
 {
-  "rewrites": [
-    {
-      "source": "/dashboard",
-      "destination": "/src/index.ts"
-    },
-    {
-      "source": "/dashboard/(.*)",
-      "destination": "/src/index.ts"
-    },
-    {
-      "source": "/about",
-      "destination": "/src/index.ts"
-    },
-    {
-      "source": "/contact",
-      "destination": "/src/index.ts"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/src/index.ts"
-    }
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/src/index.ts" },
+    { "src": "/assets/(.*)", "dest": "/src/index.ts" },
+    { "src": "/tailwind.css", "dest": "/src/index.ts" },
+    { "src": "/frontend.js", "dest": "/src/index.ts" },
+    { "src": "/dashboard", "dest": "/src/index.ts" },
+    { "src": "/about", "dest": "/src/index.ts" },
+    { "src": "/contact", "dest": "/src/index.ts" },
+    { "src": "/(.*)", "dest": "/src/index.ts" }
   ]
 }

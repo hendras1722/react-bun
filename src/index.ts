@@ -1,4 +1,5 @@
 import { serve, plugin, type BunRequest } from "bun";
+console.log("🚀 Server starting...");
 import { readFileSync, watch as fsWatch } from "fs";
 import { join } from "path";
 import { handleProxyRequest } from "./server/proxy";
@@ -180,7 +181,9 @@ server = serve({
   },
 
   async fetch(req, server) {
-    if (server.upgrade(req)) return;
+    if (process.env.NODE_ENV !== "production") {
+      if (server.upgrade(req)) return;
+    }
 
     const url = new URL(req.url);
     const pathname = url.pathname;
@@ -190,7 +193,9 @@ server = serve({
     }
 
     if (pathname === "/live-reload") {
-      if (server.upgrade(req)) return;
+      if (process.env.NODE_ENV !== "production") {
+        if (server.upgrade(req)) return;
+      }
     }
 
     // Serve build outputs (JS, CSS, Assets)
@@ -226,6 +231,7 @@ server = serve({
     }
 
     // Root asset fallback (Check if file exists in src/ and is NOT a directory)
+    if (pathname === "/favicon.ico") return new Response(null, { status: 204 });
     if (pathname.length > 1 && !pathname.includes("/", 1)) {
       const filePath = join(import.meta.dir, pathname.slice(1));
       const file = Bun.file(filePath);
