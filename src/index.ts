@@ -95,6 +95,7 @@ if (process.env.NODE_ENV !== "production") {
     if (filename && (filename.endsWith(".tsx") || filename.endsWith(".jsx"))) {
       console.log(`File ${filename} changed (${event}), regenerating routes...`);
       generate();
+      server?.publish("reload", "reload");
     }
   };
 
@@ -163,7 +164,8 @@ if (process.env.NODE_ENV !== "production") {
   `;
 }
 
-const server = serve({
+let server: any;
+server = serve({
   port: 3000,
   routes: {
     "/api/*": (req: BunRequest<'/api/*'>) => handleProxyRequest(req),
@@ -279,10 +281,7 @@ const server = serve({
   },
   websocket: {
     open(ws) {
-      clients.add(ws);
-    },
-    close(ws) {
-      clients.delete(ws);
+      ws.subscribe("reload");
     },
     message() { },
   },
