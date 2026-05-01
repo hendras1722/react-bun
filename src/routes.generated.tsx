@@ -17,7 +17,7 @@ export const generatedRoutesRaw = [
   { path: "dashboard", component: DashboardIndex, loader: DashboardIndexLoader, layout: "admin", meta: {
   activeMenu: "dashboard",
   permission: ["admin", "user"],
-  title: "Aasdasdnalytics Overview",
+  title: "Analytics Overview",
 } },
   { path: "contact", component: Contact, loader: ContactLoader, layout: "Main", meta: undefined },
   { path: "login", component: Login, loader: undefined, layout: false, meta: undefined },

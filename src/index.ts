@@ -250,31 +250,27 @@ server = serve({
         getHtmlTemplate();
 
         return await serverContext.run({ req }, async () => {
-          const { stream, dehydratedStateScript, headContext } = await render(req);
-          
-          // dehydratedStateScript already contains the full <script> tag
-          const stateScript = dehydratedStateScript || '';
+          const { html, headScript, injectedHtml, headContext } = await render(req);
           
           const dynamicHead = headContext ? renderHeadToString(headContext) : "";
 
-          const responseStream = new ReadableStream({
-            async start(controller) {
-              const headInjection = `${dynamicHead}${twLink}${bundleLink}${themeScript}${stateScript}`;
-              const currentHtmlStart = (htmlStart || '').replace(/<\/head>/i, `${headInjection}</head>`);
-              controller.enqueue(new TextEncoder().encode(currentHtmlStart + '<div id="root">'));
-              const reader = stream.getReader();
-              while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                controller.enqueue(value);
-              }
-              const modifiedHtmlEnd = (htmlEnd || '').replace('./frontend.tsx', '/frontend.js')
-                .replace('</body>', `${liveReloadScript}</body>`);
-              controller.enqueue(new TextEncoder().encode('</div>' + modifiedHtmlEnd));
-              controller.close();
-            }
-          });
-          return new Response(responseStream, { headers: { "Content-Type": "text/html" } });
+          // Build the full HTML page:
+          // 1. Inject into <head>: dynamic meta, CSS, JS bundle, theme script, TSR stream barrier
+          const headInjection = `${dynamicHead}${twLink}${bundleLink}${themeScript}${headScript}`;
+          const fullHead = (htmlStart || '').replace(/<\/head>/i, headInjection + '</head>');
+
+          // 2. Build body: root div wrapping SSR HTML
+          const rootDiv = `<div id="root">${html}</div>`;
+
+          // 3. Build end: dehydration scripts + live reload + closing tags
+          // htmlEnd starts from after </div id="root">, so we prepend scripts + fix frontend.js path
+          const endSection = (htmlEnd || '')
+            .replace('./frontend.tsx', '/frontend.js')
+            .replace('</body>', `${injectedHtml}${liveReloadScript}</body>`);
+
+          const fullHtml = fullHead + rootDiv + endSection;
+
+          return new Response(fullHtml, { headers: { "Content-Type": "text/html" } });
         });
       } catch (e) {
         if (e instanceof Response) return e;

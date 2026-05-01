@@ -1,7 +1,7 @@
-import { renderToReadableStream } from "react-dom/server";
+import ReactDOMServer from "react-dom/server";
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { attachRouterServerSsrUtils } from "@tanstack/react-router/ssr/server";
-import { router } from "./router";
+import { createRouter } from "./router";
 import { ThemeProvider } from "./components/ThemeProvider";
 import { SeoProvider } from "./hooks/useSeoMeta";
 
@@ -11,41 +11,22 @@ export async function render(request: Request) {
     initialEntries: [url.pathname + url.search],
   });
 
-  router.update({
-    history: memoryHistory,
-  });
+  const router = createRouter(memoryHistory);
 
-  // Attach SSR utils
+  // Attach SSR utils BEFORE load
   attachRouterServerSsrUtils({ router, manifest: undefined });
 
   // Wait for all loaders to resolve
   await router.load();
 
+  // Instruct TanStack Router to dehydrate the state
+  await (router as any).serverSsr?.dehydrate();
+
   const serverContext: any = { head: {} };
 
-  // Dehydrate the router state (this will buffer scripts)
-  await (router as any).serverSsr.dehydrate();
-  
-  // Take the buffered scripts which contain the dehydrated state
-  const scripts = (router as any).serverSsr.takeBufferedScripts();
-  
-  // Manually render the scripts because they are plain objects, not React elements
-  let dehydratedStateScript = "";
-  if (Array.isArray(scripts)) {
-    dehydratedStateScript = scripts.map(s => {
-      if (s.tag && s.attrs) {
-        const attrs = Object.entries(s.attrs).map(([k, v]) => `${k}="${v}"`).join(" ");
-        return `<${s.tag} ${attrs}>${s.children || ""}</${s.tag}>`;
-      }
-      return "";
-    }).join("\n");
-  } else if (scripts && (scripts as any).tag) {
-    const s = scripts as any;
-    const attrs = Object.entries(s.attrs).map(([k, v]) => `${k}="${v}"`).join(" ");
-    dehydratedStateScript = `<${s.tag} ${attrs}>${s.children || ""}</${s.tag}>`;
-  }
-
-  const stream = await renderToReadableStream(
+  // Render to string (synchronous, non-streaming)
+  // This is required so TanStack Router can inject dehydration scripts into the HTML
+  let html = ReactDOMServer.renderToString(
     <ThemeProvider defaultTheme="dark" storageKey="bun-admin-theme">
       <SeoProvider serverContext={serverContext}>
         <RouterProvider router={router} />
@@ -53,5 +34,43 @@ export async function render(request: Request) {
     </ThemeProvider>
   );
 
-  return { stream, dehydratedStateScript, headContext: serverContext.head };
+  // Signal that render is finished so TanStack Router can finalize dehydration
+  (router as any).serverSsr.setRenderFinished();
+
+  // Take the buffered HTML - this contains the dehydration scripts (with matches data)
+  // TanStack Router injects these at the end of the body
+  const injectedHtml = (router as any).serverSsr.takeBufferedHtml() || "";
+
+  // Take buffered scripts (stream barrier initialization)
+  const bufferedScripts = (router as any).serverSsr.takeBufferedScripts();
+  let headScript = "";
+  if (Array.isArray(bufferedScripts)) {
+    headScript = bufferedScripts.map((s: any) => {
+      if (s.tag && s.attrs) {
+        const attrs = Object.entries(s.attrs)
+          .filter(([k]) => k !== "nonce")
+          .map(([k, v]) => `${k}="${v}"`)
+          .join(" ");
+        return `<${s.tag}${attrs ? " " + attrs : ""}>${s.children || ""}</${s.tag}>`;
+      }
+      return "";
+    }).join("\n");
+  } else if (bufferedScripts && (bufferedScripts as any).tag) {
+    const s = bufferedScripts as any;
+    const attrs = Object.entries(s.attrs)
+      .filter(([k]) => k !== "nonce")
+      .map(([k, v]) => `${k}="${v}"`)
+      .join(" ");
+    headScript = `<${s.tag}${attrs ? " " + attrs : ""}>${s.children || ""}</${s.tag}>`;
+  }
+
+  // Cleanup router SSR state
+  (router as any).serverSsr?.cleanup?.();
+
+  return {
+    html,           // rendered body HTML
+    headScript,     // stream barrier init script (goes in <head>)
+    injectedHtml,   // dehydration scripts with router data (goes before </body>)
+    headContext: serverContext.head,
+  };
 }

@@ -29,7 +29,7 @@ export const layout = "admin";
 export const meta = {
   activeMenu: "dashboard",
   permission: ["admin", "user"],
-  title: "Aasdasdnalytics Overview",
+  title: "Analytics Overview",
 };
 
 const transactions = [
@@ -183,7 +183,7 @@ export default function Dashboard() {
 
 export const getServerSide = async () => {
   return {
-    message: "This data came from the server!qweqwewqe",
-    timestamp: new Date().toISOString()
+    message: "This data came from the server!",
+    timestamp: "2024-01-01T00:00:00.000Z"
   };
 };
