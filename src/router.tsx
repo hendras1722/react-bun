@@ -68,7 +68,7 @@ export const rootRoute = createRootRoute({
 });
 
 const PageWrapper = ({ component: Component, serverData, globalData }: any) => {
-  return <Component data={serverData} globalData={globalData} />;
+  return <Component data={serverData} serverData={serverData} globalData={globalData} />;
 };
 
 const layoutNames = Array.from(new Set(generatedRoutesRaw.map(r => {

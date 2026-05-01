@@ -14,7 +14,7 @@ const tailwindArgs = [
   "-o", "./src/tailwind.css",
 ];
 
-const tailwindFile = Bun.file("./src/tailwind.css");
+const tailwindFile = Bun.file(join(import.meta.dir, "tailwind.css"));
 const tailwindExists = await tailwindFile.exists();
 
 if (process.env.NODE_ENV !== "production" || !tailwindExists) {
@@ -102,21 +102,22 @@ if (process.env.NODE_ENV !== "production") {
   fsWatch(join(process.cwd(), "src", "layouts"), watchOptions, handleWatch);
 }
 
-let indexHtml = readFileSync("./src/index.html", "utf-8");
+let indexHtml = readFileSync(join(import.meta.dir, "index.html"), "utf-8");
 const splitPoint = '<div id="root"></div>';
 let [htmlStart, htmlEnd] = indexHtml.split(splitPoint);
 
 // Function to get latest HTML in dev
 function getHtmlTemplate() {
   if (process.env.NODE_ENV !== "production") {
-    indexHtml = readFileSync("./src/index.html", "utf-8");
+    indexHtml = readFileSync(join(import.meta.dir, "index.html"), "utf-8");
     [htmlStart, htmlEnd] = indexHtml.split(splitPoint);
   }
 }
 
 // Always inject tailwind.css directly (served fresh from disk) + bundled JS CSS
-const twLink = '<link rel="stylesheet" href="/tailwind.css" />';
-const bundleLink = buildOutputs.has("/frontend.css") ? '<link rel="stylesheet" href="/frontend.css" />' : '';
+// In production, we prefer the bundled CSS. In dev, we use the direct link for HMR.
+const twLink = process.env.NODE_ENV !== "production" ? '<link rel="stylesheet" href="/tailwind.css" />' : '';
+const bundleLink = buildOutputs.has("/frontend.css") ? '<link rel="stylesheet" href="/frontend.css" />' : (process.env.NODE_ENV === "production" ? '<link rel="stylesheet" href="/tailwind.css" />' : '');
 const themeScript = `
 <script>
   (function() {
@@ -168,7 +169,7 @@ const server = serve({
     "/api/*": (req: BunRequest<'/api/*'>) => handleProxyRequest(req),
     // Always serve tailwind.css fresh from disk so hot-reload works without server restart
     "/tailwind.css": async () => {
-      const file = Bun.file(join(process.cwd(), "src", "tailwind.css"));
+      const file = Bun.file(join(import.meta.dir, "tailwind.css"));
       if (await file.exists()) {
         return new Response(file, { headers: { "Content-Type": "text/css", "Cache-Control": "no-cache" } });
       }
@@ -195,13 +196,13 @@ const server = serve({
           // For JS, we still need the bundled version, but we should ideally rebuild it.
           // For now, let's just serve the one from memory.
         } else if (pathname === "/tailwind.css") {
-          const tailwindFile = Bun.file(join(process.cwd(), "src", "tailwind.css"));
+          const tailwindFile = Bun.file(join(import.meta.dir, "tailwind.css"));
           if (await tailwindFile.exists()) {
             return new Response(tailwindFile, { headers: { "Content-Type": "text/css" } });
           }
         } else if (pathname.startsWith("/assets/") || pathname.endsWith(".svg") || pathname.endsWith(".png")) {
           const assetName = pathname.startsWith("/assets/") ? pathname.replace("/assets/", "") : pathname.replace("/", "");
-          const assetPath = join(process.cwd(), "src", assetName);
+          const assetPath = join(import.meta.dir, assetName);
           const assetFile = Bun.file(assetPath);
           if (await assetFile.exists()) {
             return new Response(assetFile);
@@ -227,7 +228,7 @@ const server = serve({
 
     // Root asset fallback (Check if file exists in src/)
     if (pathname.length > 1 && !pathname.includes("/", 1)) {
-      const file = Bun.file(join(process.cwd(), "src", pathname.slice(1)));
+      const file = Bun.file(join(import.meta.dir, pathname.slice(1)));
       if (await file.exists()) {
         return new Response(file);
       }
@@ -246,7 +247,8 @@ const server = serve({
 
           const responseStream = new ReadableStream({
             async start(controller) {
-              const currentHtmlStart = htmlStart?.replace('</head>', `${dynamicHead}${twLink}${bundleLink}${themeScript}</head>`);
+              const headInjection = `${dynamicHead}${twLink}${bundleLink}${themeScript}`;
+              const currentHtmlStart = (htmlStart || '').replace('</head>', `${headInjection}</head>`);
               controller.enqueue(new TextEncoder().encode(currentHtmlStart + stateScript + '<div id="root">'));
               const reader = stream.getReader();
               while (true) {
