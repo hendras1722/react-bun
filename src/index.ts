@@ -7,18 +7,29 @@ import { serverContext } from "./server/context";
 
 // ── Tailwind CSS ──────────────────────────────────────────────────────────────
 // Build Tailwind once (synchronously) so the CSS is ready before the server
-// starts. Then spawn the watcher in the background so new classes are picked
-// up automatically on save without any extra npm script.
+// starts. In production, we assume the build script has already done this.
 const tailwindArgs = [
-  "npx", "@tailwindcss/cli",
+  "bunx", "@tailwindcss/cli",
   "-i", "./src/index.css",
   "-o", "./src/tailwind.css",
 ];
 
-console.log("🎨 Building Tailwind CSS...");
-const twBuild = Bun.spawnSync(tailwindArgs, { stderr: "inherit" });
-if (twBuild.exitCode !== 0) {
-  console.warn("⚠️  Tailwind build exited with code", twBuild.exitCode);
+const tailwindFile = Bun.file("./src/tailwind.css");
+const tailwindExists = await tailwindFile.exists();
+
+if (process.env.NODE_ENV !== "production" || !tailwindExists) {
+  console.log("🎨 Building Tailwind CSS...");
+  try {
+    const twBuild = Bun.spawnSync(tailwindArgs, { stderr: "inherit" });
+    if (twBuild.exitCode !== 0) {
+      console.warn("⚠️  Tailwind build exited with code", twBuild.exitCode);
+    }
+  } catch (e) {
+    console.error("❌ Failed to build Tailwind:", e);
+    if (process.env.NODE_ENV === "production" && !tailwindExists) {
+      console.error("🚨 Critical: Tailwind CSS is missing and build failed!");
+    }
+  }
 }
 
 if (process.env.NODE_ENV !== "production") {

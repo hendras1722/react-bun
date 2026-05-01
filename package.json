@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun scripts/generate-routes.ts && bun --hot src/index.ts",
-    "build": "bun scripts/generate-routes.ts && tsc --noEmit && bun build ./src/index.html --outdir=dist --sourcemap --target=browser --minify --define:process.env.NODE_ENV='\"production\"' --env='BUN_PUBLIC_*'",
+    "build": "bun scripts/generate-routes.ts && tsc --noEmit && bunx @tailwindcss/cli -i ./src/index.css -o ./src/tailwind.css --minify && bun build ./src/index.html --outdir=dist --sourcemap --target=browser --minify --define:process.env.NODE_ENV='\"production\"' --env='BUN_PUBLIC_*'",
     "start": "bun scripts/generate-routes.ts && NODE_ENV=production bun src/index.ts"
   },
   "dependencies": {

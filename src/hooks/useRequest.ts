@@ -15,7 +15,7 @@ export interface RequestOptions extends Omit<FetchOptions, 'headers' | 'method' 
  * For SSR, it should be called inside getServerSide() / loader.
  */
 export async function useRequest<T>(baseUrl: string, options: RequestOptions = {}) {
-  const API_URL = Bun.env.BUN_PUBLIC_API_URL;
+  const API_URL = process.env.BUN_PUBLIC_API_URL;
 
   const instance = ofetch.create({
     baseURL: isValidURL(API_URL ?? '') ? API_URL : undefined,

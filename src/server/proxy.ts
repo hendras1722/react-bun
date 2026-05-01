@@ -2,7 +2,7 @@ import type { BunRequest } from "bun";
 import { ofetch } from "ofetch";
 
 export async function handleProxyRequest(req: BunRequest<'/api/*'>) {
-  const API_URL = Bun.env.API_URL ?? "https://jsonplaceholder.typicode.com"
+  const API_URL = process.env.API_URL ?? "https://jsonplaceholder.typicode.com"
   const url = new URL(req.url);
   const apiPath = url.pathname.replace(/^\/api\//, "");
   const targetUrl = `${API_URL}/${apiPath}`;
