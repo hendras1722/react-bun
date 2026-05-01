@@ -182,6 +182,10 @@ const server = serve({
 
     const url = new URL(req.url);
     const pathname = url.pathname;
+    
+    if (process.env.NODE_ENV === "production") {
+      console.log(`[SSR] Request: ${pathname}`);
+    }
 
     if (pathname === "/live-reload") {
       if (server.upgrade(req)) return;

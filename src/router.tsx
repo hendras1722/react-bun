@@ -136,6 +136,7 @@ const routeTree = rootRoute.addChildren([
 export const router = createRouter({
   routeTree,
   defaultPreload: 'intent',
+  trailingSlash: 'never',
 });
 
 declare module "@tanstack/react-router" {
