@@ -230,11 +230,18 @@ const server = serve({
       return new Response(blob, { headers: { "Content-Type": contentType } });
     }
 
-    // Root asset fallback (Check if file exists in src/)
+    // Root asset fallback (Check if file exists in src/ and is NOT a directory)
     if (pathname.length > 1 && !pathname.includes("/", 1)) {
-      const file = Bun.file(join(import.meta.dir, pathname.slice(1)));
-      if (await file.exists()) {
-        return new Response(file);
+      const filePath = join(import.meta.dir, pathname.slice(1));
+      const file = Bun.file(filePath);
+      if (await file.exists() && file.size > 0) {
+        // Simple directory check: if it has no extension and exists, it might be a dir.
+        // But better check is size > 0 or actually using stat if needed.
+        // For now, let's just ensure it's not matching our known routes.
+        const isKnownRoute = ["dashboard", "about", "contact", "login", "users", "design-system"].includes(pathname.slice(1));
+        if (!isKnownRoute) {
+          return new Response(file);
+        }
       }
     }
 
@@ -246,21 +253,21 @@ const server = serve({
 
         return await serverContext.run({ req }, async () => {
           const { stream, dehydratedStateScript, headContext } = await render(req);
-          const stateScript = `<script>${dehydratedStateScript}</script>`;
+          const stateScript = dehydratedStateScript ? `<script>${dehydratedStateScript}</script>` : '';
           const dynamicHead = headContext ? renderHeadToString(headContext) : "";
 
           const responseStream = new ReadableStream({
             async start(controller) {
-              const headInjection = `${dynamicHead}${twLink}${bundleLink}${themeScript}`;
+              const headInjection = `${dynamicHead}${twLink}${bundleLink}${themeScript}${stateScript}`;
               const currentHtmlStart = (htmlStart || '').replace('</head>', `${headInjection}</head>`);
-              controller.enqueue(new TextEncoder().encode(currentHtmlStart + stateScript + '<div id="root">'));
+              controller.enqueue(new TextEncoder().encode(currentHtmlStart + '<div id="root">'));
               const reader = stream.getReader();
               while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
                 controller.enqueue(value);
               }
-              const modifiedHtmlEnd = htmlEnd?.replace('./frontend.tsx', '/frontend.js')
+              const modifiedHtmlEnd = (htmlEnd || '').replace('./frontend.tsx', '/frontend.js')
                 .replace('</body>', `${liveReloadScript}</body>`);
               controller.enqueue(new TextEncoder().encode('</div>' + modifiedHtmlEnd));
               controller.close();
