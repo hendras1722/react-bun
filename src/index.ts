@@ -214,20 +214,13 @@ const server = serve({
         }
       }
 
-      const blob = buildOutputs.get(pathname)!;
-      let contentType = blob.type;
-
-      // Fix content types
-      if (pathname.endsWith(".js")) contentType = "application/javascript";
-      else if (pathname.endsWith(".css")) contentType = "text/css";
-      else if (pathname.endsWith(".svg")) contentType = "image/svg+xml";
-      else if (pathname.endsWith(".png")) contentType = "image/png";
-      else if (pathname.endsWith(".jpg") || pathname.endsWith(".jpeg")) contentType = "image/jpeg";
-      else if (pathname.endsWith(".webp")) contentType = "image/webp";
-      else if (pathname.endsWith(".gif")) contentType = "image/gif";
-      else if (pathname.endsWith(".ico")) contentType = "image/x-icon";
-
-      return new Response(blob, { headers: { "Content-Type": contentType } });
+      // Serve bundled JS/CSS
+      if (buildOutputs.has(pathname)) {
+        const artifact = buildOutputs.get(pathname)!;
+        return new Response(artifact, { 
+          headers: { "Content-Type": artifact.type } 
+        });
+      }
     }
 
     // Root asset fallback (Check if file exists in src/ and is NOT a directory)
@@ -235,9 +228,6 @@ const server = serve({
       const filePath = join(import.meta.dir, pathname.slice(1));
       const file = Bun.file(filePath);
       if (await file.exists() && file.size > 0) {
-        // Simple directory check: if it has no extension and exists, it might be a dir.
-        // But better check is size > 0 or actually using stat if needed.
-        // For now, let's just ensure it's not matching our known routes.
         const isKnownRoute = ["dashboard", "about", "contact", "login", "users", "design-system"].includes(pathname.slice(1));
         if (!isKnownRoute) {
           return new Response(file);
@@ -253,13 +243,16 @@ const server = serve({
 
         return await serverContext.run({ req }, async () => {
           const { stream, dehydratedStateScript, headContext } = await render(req);
-          const stateScript = dehydratedStateScript ? `<script>${dehydratedStateScript}</script>` : '';
+          
+          // dehydratedStateScript already contains the full <script> tag
+          const stateScript = dehydratedStateScript || '';
+          
           const dynamicHead = headContext ? renderHeadToString(headContext) : "";
 
           const responseStream = new ReadableStream({
             async start(controller) {
               const headInjection = `${dynamicHead}${twLink}${bundleLink}${themeScript}${stateScript}`;
-              const currentHtmlStart = (htmlStart || '').replace('</head>', `${headInjection}</head>`);
+              const currentHtmlStart = (htmlStart || '').replace(/<\/head>/i, `${headInjection}</head>`);
               controller.enqueue(new TextEncoder().encode(currentHtmlStart + '<div id="root">'));
               const reader = stream.getReader();
               while (true) {
@@ -285,8 +278,13 @@ const server = serve({
     return new Response("Not Found", { status: 404 });
   },
   websocket: {
-    open(ws) { ws.subscribe("reload"); },
-    message(ws, message) { },
+    open(ws) {
+      clients.add(ws);
+    },
+    close(ws) {
+      clients.delete(ws);
+    },
+    message() { },
   },
   development: process.env.NODE_ENV !== "production"
 });

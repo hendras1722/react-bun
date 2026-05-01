@@ -1,4 +1,4 @@
-import { renderToReadableStream } from "react-dom/server";
+import { renderToReadableStream, renderToString } from "react-dom/server";
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { attachRouterServerSsrUtils } from "@tanstack/react-router/ssr/server";
 import { router } from "./router";
@@ -28,7 +28,7 @@ export async function render(request: Request) {
   
   // Take the buffered scripts which contain the dehydrated state
   const scripts = (router as any).serverSsr.takeBufferedScripts();
-  const dehydratedStateScript = scripts?.props?.dangerouslySetInnerHTML?.__html || scripts?.children || "";
+  const dehydratedStateScript = renderToString(scripts);
 
   const stream = await renderToReadableStream(
     <ThemeProvider defaultTheme="dark" storageKey="bun-admin-theme">
