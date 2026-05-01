@@ -7,8 +7,6 @@ import { renderHeadToString } from "./hooks/useSeoMeta";
 import { serverContext } from "./server/context";
 
 // ── Tailwind CSS ──────────────────────────────────────────────────────────────
-// Build Tailwind once (synchronously) so the CSS is ready before the server
-// starts. In production, we assume the build script has already done this.
 const tailwindArgs = [
   "bunx", "@tailwindcss/cli",
   "-i", "./src/index.css",
@@ -27,21 +25,16 @@ if (process.env.NODE_ENV !== "production" || !tailwindExists) {
     }
   } catch (e) {
     console.error("❌ Failed to build Tailwind:", e);
-    if (process.env.NODE_ENV === "production" && !tailwindExists) {
-      console.error("🚨 Critical: Tailwind CSS is missing and build failed!");
-    }
   }
 }
 
 if (process.env.NODE_ENV !== "production") {
-  // Watch in background — do not await, let it run alongside the server
   Bun.spawn([...tailwindArgs, "--watch"], { stderr: "pipe", stdout: "pipe" });
   console.log("👀 Tailwind watching for changes...");
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
-// 1. Build Client Bundle FIRST (before registering the SSR assets plugin)
-// This ensures Bun.build uses its native asset loader to emit actual files.
+// 1. Build Client Bundle
 console.log("🚀 Building client bundle...");
 const clientBuild = await Bun.build({
   entrypoints: ["./src/frontend.tsx"],
@@ -71,7 +64,7 @@ for (const output of clientBuild.outputs) {
 
 console.log("📦 Build outputs:", Array.from(buildOutputs.keys()));
 
-// 2. NOW register the SSR assets plugin for the Server Runtime
+// 2. SSR assets plugin
 plugin({
   name: "ssr-assets",
   setup(build) {
@@ -85,11 +78,11 @@ plugin({
   },
 });
 
-// 3. Import server entry point AFTER plugin registration
+// 3. Import server entry
 const { render } = await import("./entry-server.tsx");
 const { generate } = await import("../scripts/generate-routes");
 
-// 4. Watcher for route generation (Development only)
+// 4. Watcher (Dev only)
 if (process.env.NODE_ENV !== "production") {
   const watchOptions = { recursive: true };
   const handleWatch = (event: string, filename: string | null) => {
@@ -99,7 +92,6 @@ if (process.env.NODE_ENV !== "production") {
       server?.publish("reload", "reload");
     }
   };
-
   fsWatch(join(process.cwd(), "src", "pages"), watchOptions, handleWatch);
   fsWatch(join(process.cwd(), "src", "layouts"), watchOptions, handleWatch);
 }
@@ -108,7 +100,6 @@ let indexHtml = readFileSync(join(import.meta.dir, "index.html"), "utf-8");
 const splitPoint = '<div id="root"></div>';
 let [htmlStart, htmlEnd] = indexHtml.split(splitPoint);
 
-// Function to get latest HTML in dev
 function getHtmlTemplate() {
   if (process.env.NODE_ENV !== "production") {
     indexHtml = readFileSync(join(import.meta.dir, "index.html"), "utf-8");
@@ -116,8 +107,6 @@ function getHtmlTemplate() {
   }
 }
 
-// Always inject tailwind.css directly (served fresh from disk) + bundled JS CSS
-// In production, we prefer the bundled CSS. In dev, we use the direct link for HMR.
 const twLink = process.env.NODE_ENV !== "production" ? '<link rel="stylesheet" href="/tailwind.css" />' : '';
 const bundleLink = buildOutputs.has("/frontend.css") ? '<link rel="stylesheet" href="/frontend.css" />' : (process.env.NODE_ENV === "production" ? '<link rel="stylesheet" href="/tailwind.css" />' : '');
 const themeScript = `
@@ -132,9 +121,7 @@ const themeScript = `
   })();
 </script>
 `;
-// We will inject these dynamically in the fetch handler now
 
-// Prepare Live Reload script for injection at the end of body
 let liveReloadScript = "";
 if (process.env.NODE_ENV !== "production") {
   liveReloadScript = `
@@ -145,19 +132,9 @@ if (process.env.NODE_ENV !== "production") {
         function connect() {
           const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
           socket = new WebSocket(protocol + '//' + location.host + '/live-reload');
-          socket.onopen = () => {
-            if (reconnecting) {
-              console.log('🚀 Reconnected to dev server, reloading...');
-              location.reload();
-            }
-          };
-          socket.onmessage = (e) => {
-            if (e.data === 'reload') location.reload();
-          };
-          socket.onclose = () => {
-            reconnecting = true;
-            setTimeout(connect, 500);
-          };
+          socket.onopen = () => { if (reconnecting) location.reload(); };
+          socket.onmessage = (e) => { if (e.data === 'reload') location.reload(); };
+          socket.onclose = () => { reconnecting = true; setTimeout(connect, 500); };
         }
         connect();
       })();
@@ -168,23 +145,7 @@ if (process.env.NODE_ENV !== "production") {
 let server: any;
 server = serve({
   port: 3000,
-  routes: {
-    "/api/*": (req: BunRequest<'/api/*'>) => handleProxyRequest(req),
-    // Always serve tailwind.css fresh from disk so hot-reload works without server restart
-    "/tailwind.css": async () => {
-      const file = Bun.file(join(import.meta.dir, "tailwind.css"));
-      if (await file.exists()) {
-        return new Response(file, { headers: { "Content-Type": "text/css", "Cache-Control": "no-cache" } });
-      }
-      return new Response("", { headers: { "Content-Type": "text/css" } });
-    },
-  },
-
   async fetch(req, server) {
-    if (process.env.NODE_ENV !== "production") {
-      if (server.upgrade(req)) return;
-    }
-
     const url = new URL(req.url);
     const pathname = url.pathname;
     
@@ -192,85 +153,51 @@ server = serve({
       console.log(`[SSR] Request: ${pathname}`);
     }
 
+    // 1. WebSockets / Live Reload
     if (pathname === "/live-reload") {
-      if (process.env.NODE_ENV !== "production") {
-        if (server.upgrade(req)) return;
-      }
+      if (process.env.NODE_ENV !== "production" && server.upgrade(req)) return;
     }
 
-    // Serve build outputs (JS, CSS, Assets)
+    // 2. API Routes
+    if (pathname.startsWith("/api/")) {
+      return handleProxyRequest(req as any);
+    }
+
+    // 3. Build Outputs (JS, CSS, Assets)
     if (buildOutputs.has(pathname)) {
-      // In development, we want to serve the LATEST files from disk if they exist
-      // especially for tailwind.css which is updated by the Tailwind CLI
-      if (process.env.NODE_ENV !== "production") {
-        if (pathname === "/frontend.js") {
-          // For JS, we still need the bundled version, but we should ideally rebuild it.
-          // For now, let's just serve the one from memory.
-        } else if (pathname === "/tailwind.css") {
-          const tailwindFile = Bun.file(join(import.meta.dir, "tailwind.css"));
-          if (await tailwindFile.exists()) {
-            return new Response(tailwindFile, { headers: { "Content-Type": "text/css" } });
-          }
-        } else if (pathname.startsWith("/assets/") || pathname.endsWith(".svg") || pathname.endsWith(".png")) {
-          const assetName = pathname.startsWith("/assets/") ? pathname.replace("/assets/", "") : pathname.replace("/", "");
-          const assetPath = join(import.meta.dir, assetName);
-          const assetFile = Bun.file(assetPath);
-          if (await assetFile.exists()) {
-            return new Response(assetFile);
-          }
-        }
-      }
-
-      // Serve bundled JS/CSS
-      if (buildOutputs.has(pathname)) {
-        const artifact = buildOutputs.get(pathname)!;
-        return new Response(artifact, { 
-          headers: { "Content-Type": artifact.type } 
-        });
-      }
+      const artifact = buildOutputs.get(pathname)!;
+      return new Response(artifact, { headers: { "Content-Type": artifact.type } });
     }
 
-    // Root asset fallback (Check if file exists in src/ and is NOT a directory)
+    // 4. Known Static Assets fallback
     if (pathname === "/favicon.ico") return new Response(null, { status: 204 });
-    if (pathname.length > 1 && !pathname.includes("/", 1)) {
-      const filePath = join(import.meta.dir, pathname.slice(1));
-      const file = Bun.file(filePath);
-      if (await file.exists() && file.size > 0) {
-        const isKnownRoute = ["dashboard", "about", "contact", "login", "users", "design-system"].includes(pathname.slice(1));
-        if (!isKnownRoute) {
-          return new Response(file);
-        }
-      }
+    if (pathname === "/tailwind.css") {
+      const file = Bun.file(join(import.meta.dir, "tailwind.css"));
+      if (await file.exists()) return new Response(file, { headers: { "Content-Type": "text/css" } });
     }
 
-    // SSR Route
-    const isFile = pathname.includes(".");
-    if (!isFile || pathname.endsWith(".html")) {
+    // 5. Assets directory fallback
+    if (pathname.startsWith("/assets/")) {
+      const fileName = pathname.replace("/assets/", "");
+      const file = Bun.file(join(import.meta.dir, fileName));
+      if (await file.exists()) return new Response(file);
+    }
+
+    // 6. SSR for everything else that isn't a file
+    const hasDot = pathname.includes(".");
+    if (!hasDot || pathname.endsWith(".html")) {
       try {
         getHtmlTemplate();
-
         return await serverContext.run({ req }, async () => {
           const { html, headScript, injectedHtml, headContext } = await render(req);
-          
           const dynamicHead = headContext ? renderHeadToString(headContext) : "";
-
-          // Build the full HTML page:
-          // 1. Inject into <head>: dynamic meta, CSS, JS bundle, theme script, TSR stream barrier
           const headInjection = `${dynamicHead}${twLink}${bundleLink}${themeScript}${headScript}`;
           const fullHead = (htmlStart || '').replace(/<\/head>/i, headInjection + '</head>');
-
-          // 2. Build body: root div wrapping SSR HTML
           const rootDiv = `<div id="root">${html}</div>`;
-
-          // 3. Build end: dehydration scripts + live reload + closing tags
-          // htmlEnd starts from after </div id="root">, so we prepend scripts + fix frontend.js path
           const endSection = (htmlEnd || '')
             .replace('./frontend.tsx', '/frontend.js')
             .replace('</body>', `${injectedHtml}${liveReloadScript}</body>`);
-
-          const fullHtml = fullHead + rootDiv + endSection;
-
-          return new Response(fullHtml, { headers: { "Content-Type": "text/html" } });
+          return new Response(fullHead + rootDiv + endSection, { headers: { "Content-Type": "text/html" } });
         });
       } catch (e) {
         if (e instanceof Response) return e;
@@ -279,12 +206,16 @@ server = serve({
       }
     }
 
+    // 7. Last resort: check if file exists on disk
+    if (pathname.length > 1) {
+      const file = Bun.file(join(import.meta.dir, pathname.slice(1)));
+      if (await file.exists() && file.size > 0) return new Response(file);
+    }
+
     return new Response("Not Found", { status: 404 });
   },
   websocket: {
-    open(ws) {
-      ws.subscribe("reload");
-    },
+    open(ws) { ws.subscribe("reload"); },
     message() { },
   },
   development: process.env.NODE_ENV !== "production"
