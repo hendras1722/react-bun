@@ -28,7 +28,7 @@ export async function render(request: Request) {
   
   // Take the buffered scripts which contain the dehydrated state
   const scripts = (router as any).serverSsr.takeBufferedScripts();
-  const dehydratedStateScript = scripts.children;
+  const dehydratedStateScript = scripts?.props?.dangerouslySetInnerHTML?.__html || scripts?.children || "";
 
   const stream = await renderToReadableStream(
     <ThemeProvider defaultTheme="dark" storageKey="bun-admin-theme">

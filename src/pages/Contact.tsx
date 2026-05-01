@@ -1,7 +1,7 @@
 export const getServerSide = async () => {
   return {
     message: "This data came from the server!",
-    timestamp: new Date().toISOString()
+    timestamp: "2024-01-01T00:00:00.000Z" // Use a constant for now to avoid hydration mismatch
   };
 };
 
