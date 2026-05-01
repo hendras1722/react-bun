@@ -1,7 +1,13 @@
 {
+  "trailingSlash": false,
+  "cleanUrls": true,
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/api/(.*)",
+      "destination": "/src/index.ts"
+    },
+    {
+      "source": "/((?!api|assets|favicon.ico).*)",
       "destination": "/src/index.ts"
     }
   ]
